@@ -1,22 +1,26 @@
-import test from 'ava'
 import { transform } from '@babel/core'
-import { parse } from 'babylon'
-import traverse from '@babel/traverse'
 import generate from '@babel/generator'
-import { Injector } from './function-hook'
-import { getNodePath } from './get-node-path'
+import traverse from '@babel/traverse'
+import test from 'ava'
+import { parse } from 'babylon'
+import { hookFunction } from './hook-function'
 
-const injection = (src, opts) => {
-  let injector: Injector
-  const plugin = babel => {
+// import { getNodePath } from './nodepath'
+
+import * as babel from '@babel/core'
+import { NodePathUtility } from './'
+
+const filename = 'hoge.js'
+const util = new NodePathUtility({ babel, filename })
+const getNodePath = util.getNodePath.bind(util)
+
+const injection = (src: string, enter?: string, exit?: string) => {
+  const plugin = () => {
     return {
       visitor: {
         Function: (nodePath, state) => {
-          injector.injectionToFunction(nodePath, 'HOGE')
+          hookFunction(babel, nodePath, 'HOGE', filename, enter, exit)
         }
-      },
-      pre() {
-        injector = new Injector({ babel, ...opts })
       }
     }
   }
@@ -29,74 +33,43 @@ const f = src => transform(src).code
 test('arrow expression', t => {
   const src = 'const f = (a, b) => a + 1'
 
-  const opts = {}
-
   const expected = `
     const f = (a, b) => {
-      console.log("enter HOGE: unknown:1:11", {params: {a, b}})
+      console.log("enter HOGE: hoge.js:1:11", {params: {a, b}})
       const _temp = a + 1
-      console.log("exit  HOGE: unknown:1:26", {result: _temp})
+      console.log("exit  HOGE: hoge.js:1:26", {result: _temp})
       return _temp
     }
     `
 
-  const code = injection(src, opts)
+  const code = injection(src)
   t.true(f(expected) === code)
 })
 
-test('without babel', t => {
-  const src = 'const f = (a, b) => a + 1'
-
-  const opts = {}
-
-  const expected = `
-    const f = (a, b) => {
-      console.log("enter HOGE: unknown:1:11", {params: {a, b}})
-      const _temp = a + 1
-      console.log("exit  HOGE: unknown:1:26", {result: _temp})
-      return _temp
-    }
-    `
-
-  const nodePath = getNodePath('hoge.js', src)
-  const injector = new Injector()
-  traverse(nodePath.node, {
-    Function: (nodePath) => {
-      injector.injectionToFunction(nodePath, 'HOGE')
-    }
-  })
-  const code = generate(nodePath.node).code
-  t.true(f(expected) === code)
-})
-
-test('opts', t => {
+test('arrow function with opts', t => {
   const src = 'const f = a => a + 1'
 
-  const opts = {
-    enter: 'debug(NAME, FILENAME, START_LINE, START_COLUMN, END_LINE, END_COLUMN)',
-    exit: 'debug()'
-  }
+  const enter = 'debug(NAME, FILENAME, START_LINE, START_COLUMN, END_LINE, END_COLUMN)'
+  const exit = 'debug()'
 
   const expected = `
     const f = a => {
-      debug("HOGE", "unknown", 1, 11, 1, 21)
+      debug("HOGE", "hoge.js", 1, 11, 1, 21)
       const _temp = a + 1
       debug()
       return _temp
     }
     `
 
-  const code = injection(src, opts)
+  const code = injection(src, enter, exit)
   t.true(f(expected) === code)
 })
 
-test('', t => {
+test('arrow function without return value', t => {
   const src = 'const f = a => {a + 1}'
 
-  const opts = {
-    enter: 'enter(PARAMS)',
-    exit: 'exit(RESULT)'
-  }
+  const enter = 'enter(PARAMS)'
+  const exit = 'exit(RESULT)'
 
   const expected = `
     const f = a => {
@@ -106,21 +79,19 @@ test('', t => {
     }
     `
 
-  const code = injection(src, opts)
+  const code = injection(src, enter, exit)
   t.true(f(expected) === code)
 })
 
-test('', t => {
+test('arrow function with block and return value', t => {
   const src = `
     const f = a => {
         return a + 1
     }
     `
 
-  const opts = {
-    enter: 'enter()',
-    exit: 'exit()'
-  }
+  const enter = 'enter()'
+  const exit = 'exit()'
 
   const expected = `
     const f = a => {
@@ -131,11 +102,11 @@ test('', t => {
     }
     `
 
-  const code = injection(src, opts)
+  const code = injection(src, enter, exit)
   t.true(f(expected) === code)
 })
 
-test('', t => {
+test('arrow function with multiple return', t => {
   const src = `
     const f = a => {
       if (a < 0) {
@@ -146,10 +117,8 @@ test('', t => {
     }
     `
 
-  const opts = {
-    enter: 'enter()',
-    exit: 'exit()'
-  }
+  const enter = 'enter()'
+  const exit = 'exit()'
 
   const expected = `
     const f = a => {
@@ -167,21 +136,19 @@ test('', t => {
     }
     `
 
-  const code = injection(src, opts)
+  const code = injection(src, enter, exit)
   t.true(f(expected) === code)
 })
 
-test('', t => {
+test('arrow function nest', t => {
   const src = `
     const f = a => {
       const b = () => 1
       return a + b()
     }`
 
-  const opts = {
-    enter: 'enter(START_LINE)',
-    exit: 'exit(END_LINE)'
-  }
+  const enter = 'enter(START_LINE)'
+  const exit = 'exit(END_LINE)'
 
   const expected = `
     const f = a => {
@@ -200,24 +167,22 @@ test('', t => {
     }
     `
 
-  const code = injection(src, opts)
+  const code = injection(src, enter, exit)
   t.true(f(expected) === code)
 })
 
 test('rest param', t => {
   const src = 'const f = (a, ...b) => a + 1'
 
-  const opts = {}
-
   const expected = `
     const f = (a, ...b) => {
-      console.log("enter HOGE: unknown:1:11", {params: {a, b}})
+      console.log("enter HOGE: hoge.js:1:11", {params: {a, b}})
       const _temp = a + 1
-      console.log("exit  HOGE: unknown:1:29", {result: _temp})
+      console.log("exit  HOGE: hoge.js:1:29", {result: _temp})
       return _temp
     }
     `
 
-  const code = injection(src, opts)
+  const code = injection(src)
   t.true(f(expected) === code)
 })

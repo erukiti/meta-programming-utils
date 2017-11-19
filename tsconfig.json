@@ -1,11 +1,14 @@
 {
-  "compilerOptions": {
-    "target": "es2017",
-    "module": "commonjs",
-    "sourceMap": true,
-    "jsx": "react",
-    "outDir": "dist/",
-    "declaration": true
-  },
-  "include": ["src/**/*", "scripts/*"]
+    "compilerOptions": {
+        "target": "es2017",
+        "module": "commonjs",
+        "outDir": "dist/",
+        "allowJs": true,
+        "sourceMap": true,
+        "jsx": "react"
+    },
+    "include": [
+        "src/**/*",
+        "scripts/*"
+    ]
 }
